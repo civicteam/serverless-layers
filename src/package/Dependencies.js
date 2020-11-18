@@ -61,7 +61,6 @@ class Dependencies extends AbstractService {
     const { copyBeforeInstall, copyAfterInstall } = this.plugin.settings;
 
     this.init();
-    this.plugin.log(`${chalk.inverse.yellow(' Changes identified ')}! Re-installing...`);
 
     /**
      * This is necessary because npm is
@@ -86,6 +85,18 @@ class Dependencies extends AbstractService {
     } else {
       const commands = this.plugin.runtimes.getCommands();
       console.log(chalk.white(await this.run(commands[this.plugin.settings.packageManager])));
+    }
+
+    // For nodejs runtime allow to calculate dependency checksum.
+    // The source file depends on selected the package manager.
+    if (this.plugin.settings.runtimeDir === 'nodejs' && this.plugin.settings.useChecksum) {
+      const checksumInputFile = {
+        npm: 'package-lock.json',
+        yarn: 'node_modules/.yarn-integrity'
+      }[this.plugin.settings.packageManager];
+      const checksumCommand = `json -I -f package.json -e this.checksum="'$(sha1sum ${checksumInputFile} | awk '{print $1}')'"`;
+      console.log(`Executing checksum command: ${checksumCommand}`);
+      console.log(chalk.white(await this.run(checksumCommand)));
     }
 
     for (const index in copyAfterInstall) {

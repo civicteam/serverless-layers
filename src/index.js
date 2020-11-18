@@ -195,6 +195,12 @@ class ServerlessLayers {
     await this.dependencies.init();
     await this.localFolders.init();
 
+    // ENABLED by default
+    // in checksum mode we need to install before checking dependency differences
+    if (this.settings.dependencyInstall && this.settings.useChecksum) {
+      await this.dependencies.install();
+    }
+
     // it avoids issues if user changes some configuration
     // which will not be applied till dependencies be changed
     const hasSettingsChanged = await this.hasSettingsChanged();
@@ -214,20 +220,23 @@ class ServerlessLayers {
     }
 
     // check if something has changed
-    const hasChanged = (!hasFoldersChanged && !hasDepsChanged && !hasSettingsChanged);
+    const noChanges = (!hasFoldersChanged && !hasDepsChanged && !hasSettingsChanged);
 
     // merge package default options
     this.mergePackageOptions();
 
     const currentLayerARN = await this.getLayerArn();
-    if (hasChanged && currentLayerARN) {
+    if (noChanges && currentLayerARN) {
       this.log(`${chalk.inverse.green(' No changes ')}! Using same layer arn: ${this.logArn(currentLayerARN)}`);
       this.relateLayerWithFunctions(currentLayerARN);
       return;
     }
 
+    this.plugin.log(chalk.inverse.yellow(' Changes identified! '));
+
     // ENABLED by default
-    if (this.settings.dependencyInstall) {
+    // in checksum mode dependencies should be already installed at this point
+    if (this.settings.dependencyInstall && !this.settings.useChecksum) {
       await this.dependencies.install();
     }
 
@@ -238,7 +247,15 @@ class ServerlessLayers {
     await this.zipService.package();
     await this.bucketService.uploadZipFile();
     const version = await this.layersService.publishVersion();
-    await this.bucketService.putFile(this.dependencies.getDepsPath());
+
+    // In checksum mode we upload package.json from compile directory,
+    // as it contains the updated checksum. Otherwise upload default dependency file.
+    let depsBody;
+    const depsPath = this.dependencies.getDepsPath();
+    if (this.settings.runtimeDir === 'nodejs' && this.settings.useChecksum) {
+      depsBody = JSON.stringify(this.runtimes.current().getCompiledLayerPackageJson(), null, 2);
+    }
+    await this.bucketService.putFile(depsPath, depsBody);
 
     this.relateLayerWithFunctions(version.LayerVersionArn);
   }
