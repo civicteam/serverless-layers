@@ -232,7 +232,7 @@ class ServerlessLayers {
       return;
     }
 
-    this.plugin.log(chalk.inverse.yellow(' Changes identified! '));
+    this.log(chalk.inverse.yellow(' Changes identified! '));
 
     // ENABLED by default
     // in checksum mode dependencies should be already installed at this point
